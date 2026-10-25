@@ -1,0 +1,73 @@
+name: lint
+
+# The only workflow this repository runs for itself.
+#
+# There is no project here to test — these files are templates, exercised by
+# the repositories that call them. What this checks is that the templates are
+# well formed and that the README describes them accurately, which is
+# validating the deliverable rather than pretending to have a project.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: raven-actions/actionlint@v2
+        with:
+          flags: -color
+
+  documented-inputs:
+    # An undocumented input is invisible: a caller cannot use what the README
+    # does not mention, and a removed one leaves instructions that no longer
+    # work. Six inputs had drifted out of the tables before this existed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every input appears in the README
+        shell: python
+        run: |
+          import re
+          import sys
+          from pathlib import Path
+
+          import yaml
+
+          readme = Path("README.md").read_text()
+          problems = []
+
+          for name in ("python-ci", "python-publish"):
+              data = yaml.safe_load(Path(f".github/workflows/{name}.yml").read_text())
+              trigger = data.get(True) or data.get("on")
+              declared = set(trigger["workflow_call"]["inputs"])
+              section = readme.split(f"### `{name}.yml`")[1].split("###")[0]
+              documented = set(re.findall(r"^\| `([a-z-]+)` \|", section, re.M))
+              for missing in sorted(declared - documented):
+                  problems.append(f"{name}.yml: {missing} is not in the README")
+              for extra in sorted(documented - declared):
+                  problems.append(f"{name}.yml: README documents {extra}, which does not exist")
+
+          for action in ("setup", "gate", "build"):
+              data = yaml.safe_load(Path(f"python/{action}/action.yml").read_text())
+              for missing in sorted(data.get("inputs") or {}):
+                  if f"`{missing}`" not in readme:
+                      problems.append(f"python/{action}: {missing} is not in the README")
+
+          for problem in problems:
+              print(f"::error::{problem}")
+          print(f"{len(problems)} problems")
+          sys.exit(1 if problems else 0)

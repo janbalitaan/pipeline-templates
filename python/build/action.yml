@@ -1,0 +1,56 @@
+name: Python build
+description: >
+  Build the distributions, validate them the way PyPI will, and confirm the
+  git tag agrees with the packaged version.
+
+inputs:
+  verify-tag:
+    description: Fail when the tag disagrees with the packaged version.
+    required: false
+    default: 'true'
+
+outputs:
+  version:
+    description: The version that was packaged.
+    value: ${{ steps.version.outputs.version }}
+
+  working-directory:
+    description: >
+      Where to run. Defaults to the repository root; a monorepo points it at
+      one of its packages.
+    required: false
+    default: '.'
+
+runs:
+  using: composite
+  steps:
+    - name: Build
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: uv build
+
+    - name: Check the distributions
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: uvx twine check --strict dist/*
+
+    - name: Read the packaged version
+      id: version
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        packaged=$(uv run python -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes().decode())['project']['version'])")
+        echo "version=$packaged" >> "$GITHUB_OUTPUT"
+        echo "packaged version $packaged"
+
+    - name: Confirm the tag matches
+      if: inputs.verify-tag == 'true' && github.ref_type == 'tag'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        tag="${GITHUB_REF_NAME#v}"
+        packaged="${{ steps.version.outputs.version }}"
+        if [ "$tag" != "$packaged" ]; then
+          echo "::error::tag $tag does not match pyproject version $packaged"
+          exit 1
+        fi

@@ -1,0 +1,88 @@
+name: Python gate
+description: >
+  Lint, format check, type check, tests and cognitive complexity. The checks
+  a change has to pass, in one step.
+
+inputs:
+  source-dir:
+    required: false
+    default: src
+  test-dir:
+    description: Empty to skip linting tests.
+    required: false
+    default: tests
+  run-lint:
+    required: false
+    default: 'true'
+  run-format-check:
+    required: false
+    default: 'true'
+  run-type-check:
+    required: false
+    default: 'true'
+  run-tests:
+    required: false
+    default: 'true'
+  coverage-min:
+    description: Minimum coverage percent. 0 disables the gate.
+    required: false
+    default: '0'
+  max-complexity:
+    description: >
+      Highest cognitive complexity any one function may have. 0 skips the
+      check. Measured with complexipy, so there is no script for a
+      repository to carry a copy of.
+    required: false
+    default: '15'
+  complexity-dir:
+    description: Defaults to source-dir.
+    required: false
+    default: ''
+
+  working-directory:
+    description: >
+      Where to run. Defaults to the repository root; a monorepo points it at
+      one of its packages.
+    required: false
+    default: '.'
+
+runs:
+  using: composite
+  steps:
+    - name: Lint
+      if: inputs.run-lint == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: uv run ruff check ${{ inputs.source-dir }} ${{ inputs.test-dir }}
+
+    - name: Check formatting
+      if: inputs.run-format-check == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: uv run ruff format --check ${{ inputs.source-dir }} ${{ inputs.test-dir }}
+
+    - name: Type check
+      if: inputs.run-type-check == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: uv run ty check ${{ inputs.source-dir }}
+
+    - name: Test
+      if: inputs.run-tests == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ "${{ inputs.coverage-min }}" -gt 0 ]; then
+          uv run pytest -q --cov --cov-fail-under=${{ inputs.coverage-min }}
+        else
+          uv run pytest -q
+        fi
+
+    - name: Cognitive complexity
+      if: inputs.max-complexity != '0'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        target="${{ inputs.complexity-dir }}"
+        [ -n "$target" ] || target="${{ inputs.source-dir }}"
+        uvx complexipy "$target" --max-complexity-allowed ${{ inputs.max-complexity }}
