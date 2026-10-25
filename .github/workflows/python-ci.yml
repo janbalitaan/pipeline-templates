@@ -72,7 +72,7 @@ jobs:
         python-version: ${{ fromJSON(inputs.python-versions) }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: janbalitaan/pipeline-templates/python/setup@main
         with:
@@ -97,7 +97,7 @@ jobs:
     if: inputs.run-complexity
     runs-on: ${{ inputs.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: janbalitaan/pipeline-templates/python/setup@main
         with:
