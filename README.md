@@ -277,3 +277,60 @@ is not the same as this commit being sound.
 ## License
 
 MIT
+
+## Publishing to PyPI: use the actions, not the workflow
+
+PyPI's trusted publishing **cannot name a reusable workflow as the
+publisher** ([warehouse#11096](https://github.com/pypi/warehouse/issues/11096)).
+It matches on the workflow that performs the upload, so calling
+`python-publish.yml` makes the OIDC claim point at this repository instead of
+yours, and the upload is refused:
+
+```
+invalid-publisher: valid token, but no corresponding publisher
+  workflow_ref:     you/your-project/.github/workflows/publish.yml@refs/heads/main
+  job_workflow_ref: janbalitaan/pipeline-templates/.github/workflows/python-publish.yml@refs/heads/main
+```
+
+No publisher configuration matches that second line.
+
+Spell the job out in your own `publish.yml` and use the composite actions.
+They run inside your workflow rather than replacing it, so the claim stays
+yours and the reuse is preserved:
+
+```yaml
+name: publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: janbalitaan/pipeline-templates/python/setup@main
+        with:
+          python-version: '3.12'
+          sync-args: --all-extras
+      - uses: janbalitaan/pipeline-templates/python/gate@main
+        with:
+          source-dir: src
+          test-dir: tests
+      - uses: janbalitaan/pipeline-templates/python/build@main
+        with:
+          verify-tag: 'true'
+      - uses: pypa/gh-action-pypi-publish@release/v1
+```
+
+Configure the trusted publisher with **your** repository and `publish.yml`,
+and an environment name matching the `environment:` above.
+
+CI is unaffected — `python-ci.yml` is a reusable workflow and stays one,
+because nothing about CI depends on an OIDC claim.
