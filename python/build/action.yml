@@ -9,17 +9,17 @@ inputs:
     required: false
     default: 'true'
 
-outputs:
-  version:
-    description: The version that was packaged.
-    value: ${{ steps.version.outputs.version }}
-
   working-directory:
     description: >
       Where to run. Defaults to the repository root; a monorepo points it at
       one of its packages.
     required: false
     default: '.'
+
+outputs:
+  version:
+    description: The version that was packaged.
+    value: ${{ steps.version.outputs.version }}
 
 runs:
   using: composite
