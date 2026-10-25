@@ -1,0 +1,108 @@
+name: python-publish
+
+# Publishes to PyPI with trusted publishing, so no API token is stored
+# anywhere. The steps live in python/setup, python/gate and python/build;
+# this file exists here because GitHub requires reusable workflows to sit
+# directly in .github/workflows.
+#
+#   on:
+#     release:
+#       types: [published]
+#
+#   jobs:
+#     publish:
+#       uses: janbalitaan/pipeline-templates/.github/workflows/python-publish.yml@main
+#       permissions:
+#         id-token: write
+
+on:
+  workflow_call:
+    inputs:
+      source-dir:
+        type: string
+        default: src
+      test-dir:
+        type: string
+        default: tests
+      sync-args:
+        type: string
+        default: ''
+      python-version:
+        type: string
+        default: '3.12'
+      environment:
+        description: >
+          The GitHub environment holding the PyPI trusted publisher. Also
+          where a required reviewer can be configured, so a release cannot
+          publish on a push alone.
+        type: string
+        default: pypi
+      repository-url:
+        description: 'Override to publish to TestPyPI.'
+        type: string
+        default: ''
+      run-gate:
+        description: >
+          Re-run the checks before publishing. On by default: shipping a
+          version that fails its own tests is worse than shipping late.
+        type: boolean
+        default: true
+      complexity-script:
+        type: string
+        default: scripts/complexity.py
+      verify-tag:
+        type: boolean
+        default: true
+      working-directory:
+        description: >
+          Where the project lives. Defaults to the repository root; a
+          monorepo points it at one of its packages.
+        type: string
+        default: '.'
+      runs-on:
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  publish:
+    # Deliberately one job. Splitting build and publish would mean passing the
+    # distributions between them as an artifact, which consumes storage on
+    # every release and buys nothing — the upload and download would be
+    # seconds apart on the same commit. Anyone forking this into a private
+    # repository pays for that storage, so the default is not to create it.
+    runs-on: ${{ inputs.runs-on }}
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      # Trusted publishing exchanges this short-lived OIDC token for an
+      # upload token. Nothing long-lived is stored, so there is nothing to
+      # leak or rotate.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: janbalitaan/pipeline-templates/python/setup@main
+        with:
+          python-version: ${{ inputs.python-version }}
+          sync-args: ${{ inputs.sync-args }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - uses: janbalitaan/pipeline-templates/python/gate@main
+        if: inputs.run-gate
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          source-dir: ${{ inputs.source-dir }}
+          test-dir: ${{ inputs.test-dir }}
+          complexity-script: ${{ inputs.complexity-script }}
+
+      - uses: janbalitaan/pipeline-templates/python/build@main
+        with:
+          verify-tag: ${{ inputs.verify-tag }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ inputs.repository-url }}

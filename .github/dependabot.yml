@@ -1,0 +1,21 @@
+version: 2
+
+updates:
+  # The templates pin third-party actions by major tag. Those tags move, but
+  # not forever — `setup-uv@v5` stops receiving fixes when v6 ships, and
+  # nothing here would notice.
+  #
+  # This matters more in this repository than in most: every repository
+  # calling these templates at `@main` inherits whatever versions are pinned
+  # here, so a stale action is stale everywhere at once.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ""
+    labels:
+      - dependencies
+    # One pull request at a time: a batch of action bumps is harder to
+    # attribute when something breaks downstream.
+    open-pull-requests-limit: 3

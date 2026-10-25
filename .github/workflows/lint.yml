@@ -1,0 +1,33 @@
+name: lint
+
+# The only workflow this repository runs for itself.
+#
+# There is no project here to test — these files are templates, exercised by
+# the repositories that call them. What this does is check the templates are
+# *well formed*: actionlint reads them the way GitHub will, and catches an
+# unknown input, a malformed expression or a step referencing a job that does
+# not exist. That is validating the deliverable, not pretending to have a
+# project.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: raven-actions/actionlint@v2
+        with:
+          flags: -color

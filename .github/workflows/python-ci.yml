@@ -1,0 +1,115 @@
+name: python-ci
+
+# A reusable workflow. GitHub requires these to sit directly in
+# .github/workflows — subdirectories are not supported — so the file lives
+# here while the actual steps live in python/setup and python/gate as
+# composite actions, which may be organized into directories freely.
+#
+# Call it instead of copying it:
+#
+#   jobs:
+#     ci:
+#       uses: janbalitaan/pipeline-templates/.github/workflows/python-ci.yml@main
+#
+# Every input has a default, so that line is a complete configuration.
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: 'JSON array of versions for the test matrix.'
+        type: string
+        default: '["3.10", "3.11", "3.12", "3.13"]'
+      source-dir:
+        type: string
+        default: src
+      test-dir:
+        description: 'Empty to skip linting tests.'
+        type: string
+        default: tests
+      sync-args:
+        description: 'Extra arguments for `uv sync`, such as --all-extras.'
+        type: string
+        default: ''
+      run-complexity:
+        description: 'Run the cognitive complexity check as its own job.'
+        type: boolean
+        default: true
+      complexity-script:
+        type: string
+        default: scripts/complexity.py
+      run-lint:
+        type: boolean
+        default: true
+      run-format-check:
+        type: boolean
+        default: true
+      run-type-check:
+        type: boolean
+        default: true
+      coverage-min:
+        description: 'Minimum coverage percent. 0 disables the gate.'
+        type: number
+        default: 0
+      working-directory:
+        description: >
+          Where the project lives. Defaults to the repository root; a
+          monorepo points it at one of its packages.
+        type: string
+        default: '.'
+      runs-on:
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  check:
+    runs-on: ${{ inputs.runs-on }}
+    strategy:
+      # Not fail-fast: knowing a failure is specific to one Python version is
+      # most of the diagnosis, and cancelling the other legs throws it away.
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: janbalitaan/pipeline-templates/python/setup@main
+        with:
+          python-version: ${{ matrix.python-version }}
+          sync-args: ${{ inputs.sync-args }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - uses: janbalitaan/pipeline-templates/python/gate@main
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          source-dir: ${{ inputs.source-dir }}
+          test-dir: ${{ inputs.test-dir }}
+          run-lint: ${{ inputs.run-lint }}
+          run-format-check: ${{ inputs.run-format-check }}
+          run-type-check: ${{ inputs.run-type-check }}
+          coverage-min: ${{ inputs.coverage-min }}
+          # Measured once in its own job rather than per version, since it
+          # reads source and would report the same number four times.
+          complexity-script: ''
+
+  complexity:
+    if: inputs.run-complexity
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: janbalitaan/pipeline-templates/python/setup@main
+        with:
+          sync-args: ${{ inputs.sync-args }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - uses: janbalitaan/pipeline-templates/python/gate@main
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          source-dir: ${{ inputs.source-dir }}
+          run-lint: 'false'
+          run-format-check: 'false'
+          run-type-check: 'false'
+          run-tests: 'false'
+          complexity-script: ${{ inputs.complexity-script }}
